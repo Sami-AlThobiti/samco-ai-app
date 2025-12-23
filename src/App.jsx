@@ -1,5 +1,28 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, Video, Share2, ArrowLeft, Download, Check, Sparkles, Image as ImageIcon, Film, UserPlus, Loader2, Copy, Menu } from 'lucide-react';
+import { Camera, Video, Share2, ArrowLeft, Download, Check, Sparkles, Image as ImageIcon, Film, UserPlus, Loader2, Copy, Menu, Play } from 'lucide-react';
+
+// --- Utility Functions ---
+
+// دالة لترجمة النص من العربية للإنجليزية لضمان دقة النتائج
+async function translateToEnglish(text) {
+  try {
+    // التحقق مما إذا كان النص يحتوي على أحرف عربية
+    const hasArabic = /[\u0600-\u06FF]/.test(text);
+    if (!hasArabic) return text;
+
+    // استخدام API مجاني للترجمة (MyMemory API)
+    const response = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=ar|en`);
+    const data = await response.json();
+    
+    if (data.responseData && data.responseData.translatedText) {
+      return data.responseData.translatedText;
+    }
+    return text;
+  } catch (error) {
+    console.error("Translation failed", error);
+    return text; // في حال الفشل نستخدم النص كما هو
+  }
+}
 
 // --- Components ---
 
@@ -33,7 +56,6 @@ const FollowGate = ({ onUnlock }) => {
   const [hasFollowed, setHasFollowed] = useState(false);
 
   const handleFollowClick = () => {
-    // Open TikTok in new tab
     window.open('https://www.tiktok.com/@samco_designer', '_blank');
     setHasFollowed(true);
   };
@@ -73,10 +95,6 @@ const FollowGate = ({ onUnlock }) => {
           <span>لقد تابعت، افتح التطبيق</span>
         </button>
       )}
-      
-      <p className="mt-6 text-xs text-[#555]">
-        * يتم حفظ حالة المتابعة على جهازك لعدم التكرار
-      </p>
     </div>
   );
 };
@@ -85,7 +103,6 @@ const FollowGate = ({ onUnlock }) => {
 const HomeScreen = ({ onNavigate }) => {
   return (
     <div className="min-h-screen bg-[#0E0E13] text-white font-cairo pb-10">
-      {/* Header */}
       <header className="p-6 flex justify-between items-center bg-[#0E0E13]/90 backdrop-blur-md sticky top-0 z-10 border-b border-[#1A1A23]">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-gradient-to-br from-[#6A5CFF] to-[#00E5FF] rounded-lg flex items-center justify-center">
@@ -108,7 +125,6 @@ const HomeScreen = ({ onNavigate }) => {
         </div>
 
         <div className="grid gap-4">
-          {/* Image Gen Card */}
           <button 
             onClick={() => onNavigate('imageGen')}
             className="group relative overflow-hidden bg-[#1A1A23] p-6 rounded-2xl border border-[#2A2A35] text-right transition-all hover:border-[#6A5CFF] hover:shadow-[0_0_20px_rgba(106,92,255,0.15)]"
@@ -124,7 +140,6 @@ const HomeScreen = ({ onNavigate }) => {
             </div>
           </button>
 
-          {/* Video Gen Card */}
           <button 
             onClick={() => onNavigate('videoGen')}
             className="group relative overflow-hidden bg-[#1A1A23] p-6 rounded-2xl border border-[#2A2A35] text-right transition-all hover:border-[#00E5FF] hover:shadow-[0_0_20px_rgba(0,229,255,0.15)]"
@@ -140,7 +155,6 @@ const HomeScreen = ({ onNavigate }) => {
             </div>
           </button>
           
-          {/* Share Card */}
           <button 
              onClick={() => {
                 if (navigator.share) {
@@ -167,7 +181,6 @@ const HomeScreen = ({ onNavigate }) => {
         </div>
       </div>
       
-      {/* Sticky TikTok CTA */}
       <div className="fixed bottom-6 left-6 right-6">
         <a href="https://www.tiktok.com/@samco_designer" target="_blank" rel="noreferrer" className="block w-full bg-[#1A1A23]/80 backdrop-blur border border-[#FF0050]/30 text-white text-center py-3 rounded-full text-sm hover:bg-[#FF0050]/20 transition-colors flex items-center justify-center gap-2">
            <span className="w-2 h-2 bg-[#FF0050] rounded-full animate-ping"></span>
@@ -178,12 +191,13 @@ const HomeScreen = ({ onNavigate }) => {
   );
 };
 
-// 4. Generator Screen (Active Logic)
+// 4. Generator Screen
 const GeneratorScreen = ({ type, onBack }) => {
   const [prompt, setPrompt] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [selectedSize, setSelectedSize] = useState(type === 'video' ? '9:16' : '1:1');
+  const [statusText, setStatusText] = useState('');
   const fileInputRef = useRef(null);
   const [refImage, setRefImage] = useState(null);
 
@@ -191,7 +205,6 @@ const GeneratorScreen = ({ type, onBack }) => {
   const title = isVideo ? 'إنشاء فيديو' : 'إنشاء صور';
   const modelName = isVideo ? 'Google Veo 3' : 'Nano Banana Pro';
   const icon = isVideo ? <Video className="w-6 h-6 text-[#00E5FF]" /> : <Camera className="w-6 h-6 text-[#6A5CFF]" />;
-  const primaryColor = isVideo ? 'text-[#00E5FF]' : 'text-[#6A5CFF]';
   const buttonColor = isVideo ? 'bg-[#00E5FF] hover:bg-[#00c4d9]' : 'bg-[#6A5CFF] hover:bg-[#584cf5]';
 
   const handleGenerate = async () => {
@@ -199,26 +212,30 @@ const GeneratorScreen = ({ type, onBack }) => {
     setLoading(true);
     setResult(null);
 
-    // --- منطق التوليد الفعلي ---
     try {
+      // 1. ترجمة النص أولاً لضمان الفهم الصحيح
+      setStatusText('جاري تحليل النص...');
+      const translatedPrompt = await translateToEnglish(prompt);
+      
+      // إضافة تحسينات على البرومبت لضمان الجودة
+      const enhancedPrompt = `${translatedPrompt}, highly detailed, 8k resolution, cinematic lighting, hyper realistic`;
+      const encodedPrompt = encodeURIComponent(enhancedPrompt);
+      const randomSeed = Math.floor(Math.random() * 999999);
+
+      // تحديد الأبعاد
+      let width = 1024;
+      let height = 1024;
+      if (selectedSize === '9:16') { width = 720; height = 1280; }
+      if (selectedSize === '16:9') { width = 1280; height = 720; }
+      if (selectedSize === '4:5') { width = 1080; height = 1350; }
+
+      setStatusText('جاري التوليد بالذكاء الاصطناعي...');
+      
       if (!isVideo) {
-        // 1. توليد الصور (Using Pollinations API - Free & No Key)
-        const encodedPrompt = encodeURIComponent(prompt);
-        // نحدد العرض والارتفاع بناءً على الاختيار
-        let width = 1024;
-        let height = 1024;
-        if (selectedSize === '9:16') { width = 720; height = 1280; }
-        if (selectedSize === '16:9') { width = 1280; height = 720; }
-        if (selectedSize === '4:5') { width = 1080; height = 1350; }
-        
-        // إضافة رقم عشوائي لتجنب التخزين المؤقت (Caching)
-        const randomSeed = Math.floor(Math.random() * 100000);
+        // --- توليد الصور ---
         const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&seed=${randomSeed}&nologo=true&model=flux`;
         
-        // محاكاة وقت المعالجة لتبدو واقعية
-        await new Promise(r => setTimeout(r, 2000));
-        
-        // التحقق من أن الصورة قابلة للتحميل (Pre-load)
+        // تحميل مسبق للصورة
         const img = new Image();
         img.src = imageUrl;
         img.onload = () => {
@@ -227,32 +244,31 @@ const GeneratorScreen = ({ type, onBack }) => {
         };
         img.onerror = () => {
           setLoading(false);
-          alert("فشل التوليد، يرجى المحاولة مرة أخرى بكلمات مختلفة");
+          alert("حدث خطأ أثناء التوليد، حاول مرة أخرى.");
         };
 
       } else {
-        // 2. توليد الفيديو (Simulation + Random Selection)
-        // ملاحظة: لا يوجد API مجاني عام للفيديو حالياً (Sora/Veo غير متاح للعامة مجاناً).
-        // سنقوم بمحاكاة ذكية تختار فيديو عشوائي لتبدو العملية حقيقية.
-        await new Promise(r => setTimeout(r, 4000)); // وقت أطول للفيديو
+        // --- توليد الفيديو (محاكاة ذكية) ---
+        // بما أن APIs الفيديو غير مجانية، سنولد "صورة سينمائية" بناءً على وصف المستخدم تماماً
+        // ونعرضها بتأثير حركي (Ken Burns) لتبدو كفيديو.
         
-        const mockVideos = [
-          'https://assets.mixkit.co/videos/preview/mixkit-stars-in-space-1610-large.mp4',
-          'https://assets.mixkit.co/videos/preview/mixkit-waves-in-the-water-1164-large.mp4',
-          'https://assets.mixkit.co/videos/preview/mixkit-forest-stream-in-the-sunlight-529-large.mp4',
-          'https://assets.mixkit.co/videos/preview/mixkit-abstract-technology-network-background-2868-large.mp4'
-        ];
+        const videoFrameUrl = `https://image.pollinations.ai/prompt/cinematic shot from a movie, ${encodedPrompt}?width=${width}&height=${height}&seed=${randomSeed}&nologo=true&model=flux-pro`;
         
-        // اختيار فيديو عشوائي
-        const randomVideo = mockVideos[Math.floor(Math.random() * mockVideos.length)];
+        // تأخير بسيط لمحاكاة معالجة الفيديو
+        await new Promise(r => setTimeout(r, 3000));
         
-        setLoading(false);
-        setResult(randomVideo);
+        const img = new Image();
+        img.src = videoFrameUrl;
+        img.onload = () => {
+          setLoading(false);
+          setResult(videoFrameUrl); // نستخدم الصورة لكن سنعرضها كفيديو
+        };
       }
+
     } catch (error) {
       console.error(error);
       setLoading(false);
-      alert("حدث خطأ أثناء الاتصال بالخادم");
+      alert("حدث خطأ في الاتصال");
     }
   };
 
@@ -270,7 +286,6 @@ const GeneratorScreen = ({ type, onBack }) => {
 
   return (
     <div className="min-h-screen bg-[#0E0E13] text-white font-cairo flex flex-col">
-      {/* Header */}
       <div className="p-4 flex items-center gap-4 border-b border-[#1A1A23] bg-[#0E0E13]">
         <button onClick={onBack} className="p-2 rounded-full hover:bg-[#1A1A23]">
           <ArrowLeft className="w-6 h-6" />
@@ -282,7 +297,6 @@ const GeneratorScreen = ({ type, onBack }) => {
       </div>
 
       <div className="flex-1 p-6 overflow-y-auto">
-        {/* Reference Image Input */}
         <div 
           onClick={() => fileInputRef.current.click()}
           className="mb-6 border-2 border-dashed border-[#2A2A35] rounded-xl p-4 flex flex-col items-center justify-center cursor-pointer hover:border-[#6A5CFF] transition-colors min-h-[120px]"
@@ -308,14 +322,13 @@ const GeneratorScreen = ({ type, onBack }) => {
           <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageUpload} />
         </div>
 
-        {/* Prompt Input */}
         <div className="mb-6">
           <label className="block text-sm font-bold mb-2 text-[#B5B5C3]">الوصف (Prompt)</label>
           <div className="relative">
             <textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder={isVideo ? `صف الفيديو الذي تريده...\nمثال: "مشهد سينمائي لسيارة في الفضاء، جودة عالية 4k"` : `اكتب وصفاً دقيقاً...\nمثال: "قطة ترتدي نظارة شمسية في المستقبل، إضاءة نيون"`}
+              placeholder={isVideo ? `صف الفيديو بدقة...\nمثال: "سيارة فيراري حمراء تسير بسرعة في شوارع طوكيو ليلاً مع أمطار خفيفة"` : `اكتب وصفاً دقيقاً...\nمثال: "صورة مقربة لعين قطة تعكس المجرة، دقة عالية"`}
               className="w-full bg-[#1A1A23] border border-[#2A2A35] rounded-xl p-4 text-white focus:border-[#6A5CFF] outline-none min-h-[160px] resize-none text-right"
               maxLength={4000}
             />
@@ -328,7 +341,6 @@ const GeneratorScreen = ({ type, onBack }) => {
           </div>
         </div>
 
-        {/* Settings */}
         <div className="grid grid-cols-2 gap-4 mb-8">
            <div>
              <label className="block text-xs font-bold mb-2 text-[#B5B5C3]">المقاس</label>
@@ -352,7 +364,6 @@ const GeneratorScreen = ({ type, onBack }) => {
            </div>
         </div>
 
-        {/* Generate Button */}
         <button
           onClick={handleGenerate}
           disabled={loading || !prompt}
@@ -361,7 +372,7 @@ const GeneratorScreen = ({ type, onBack }) => {
           {loading ? (
             <>
               <Loader2 className="w-6 h-6 animate-spin" />
-              <span>جاري التوليد...</span>
+              <span>{statusText || 'جاري المعالجة...'}</span>
             </>
           ) : (
             <>
@@ -371,26 +382,45 @@ const GeneratorScreen = ({ type, onBack }) => {
           )}
         </button>
 
-        {/* Result Area */}
         {result && (
             <div className="mt-8 bg-[#1A1A23] rounded-2xl p-4 border border-[#2A2A35] animate-fade-in">
                 <h3 className="font-bold mb-4 text-center">النتيجة:</h3>
-                <div className="rounded-lg overflow-hidden mb-4 border border-[#2A2A35] bg-black flex items-center justify-center min-h-[300px]">
+                <div className="rounded-lg overflow-hidden mb-4 border border-[#2A2A35] bg-black flex items-center justify-center min-h-[300px] relative group">
                     {isVideo ? (
-                        <div className="relative w-full">
-                           <video src={result} controls autoPlay loop className="w-full h-auto max-h-[500px]" />
-                           <div className="absolute top-2 left-2 bg-black/60 px-2 py-1 rounded text-[10px] text-white">AI Generated</div>
+                        /* Smart Video Simulation: Ken Burns Effect */
+                        <div className="relative w-full overflow-hidden h-[400px]">
+                           <div 
+                             className="w-full h-full bg-cover bg-center absolute top-0 left-0 transition-transform duration-[10s] ease-linear transform scale-100 group-hover:scale-125"
+                             style={{ 
+                               backgroundImage: `url(${result})`,
+                               animation: 'kenburns 15s infinite alternate' 
+                             }}
+                           ></div>
+                           {/* Fake UI Overlay */}
+                           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                              <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center">
+                                 <Play className="w-8 h-8 text-white fill-white" />
+                              </div>
+                           </div>
+                           <div className="absolute top-2 left-2 bg-black/60 px-2 py-1 rounded text-[10px] text-white z-10">AI Preview Clip</div>
+                           
+                           {/* CSS for Animation */}
+                           <style>{`
+                             @keyframes kenburns {
+                               0% { transform: scale(1.0); }
+                               100% { transform: scale(1.2) translate(-2%, -2%); }
+                             }
+                           `}</style>
                         </div>
                     ) : (
                         <img src={result} alt="Generated" className="w-full h-auto max-h-[500px] object-contain" />
                     )}
                 </div>
                 
-                {/* Actions */}
                 <div className="flex gap-3">
                     <a 
                       href={result} 
-                      download={`samco_ai_${Date.now()}.${isVideo ? 'mp4' : 'jpg'}`}
+                      download={`samco_ai_${Date.now()}.${isVideo ? 'jpg' : 'jpg'}`}
                       target="_blank"
                       rel="noreferrer"
                       className="flex-1 bg-[#2A2A35] py-3 rounded-lg text-sm font-bold flex items-center justify-center gap-2 hover:bg-[#333] transition-colors text-white no-underline"
@@ -408,23 +438,14 @@ const GeneratorScreen = ({ type, onBack }) => {
   );
 };
 
-// --- Main App Logic ---
-
 export default function App() {
-  const [view, setView] = useState('splash'); // splash, followGate, home, imageGen, videoGen
+  const [view, setView] = useState('splash');
   
-  // Check Local Storage on mount
-  useEffect(() => {
-    // Splash timer handles transition logic based on this
-  }, []);
+  useEffect(() => {}, []);
 
   const handleSplashFinish = () => {
     const isFollowed = localStorage.getItem('samco_user_followed');
-    if (isFollowed) {
-      setView('home');
-    } else {
-      setView('followGate');
-    }
+    setView(isFollowed ? 'home' : 'followGate');
   };
 
   const handleFollowUnlock = () => {
@@ -433,18 +454,12 @@ export default function App() {
 
   const renderView = () => {
     switch(view) {
-      case 'splash':
-        return <SplashScreen onFinish={handleSplashFinish} />;
-      case 'followGate':
-        return <FollowGate onUnlock={handleFollowUnlock} />;
-      case 'home':
-        return <HomeScreen onNavigate={(screen) => setView(screen)} />;
-      case 'imageGen':
-        return <GeneratorScreen type="image" onBack={() => setView('home')} />;
-      case 'videoGen':
-        return <GeneratorScreen type="video" onBack={() => setView('home')} />;
-      default:
-        return <div className="text-white">Error</div>;
+      case 'splash': return <SplashScreen onFinish={handleSplashFinish} />;
+      case 'followGate': return <FollowGate onUnlock={handleFollowUnlock} />;
+      case 'home': return <HomeScreen onNavigate={(screen) => setView(screen)} />;
+      case 'imageGen': return <GeneratorScreen type="image" onBack={() => setView('home')} />;
+      case 'videoGen': return <GeneratorScreen type="video" onBack={() => setView('home')} />;
+      default: return <div className="text-white">Error</div>;
     }
   };
 
